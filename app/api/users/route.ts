@@ -11,7 +11,7 @@ const supabaseAdmin = createClient(
 async function requireAdmin() {
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user || user.email !== process.env.ADMIN_EMAIL) return null;
+  if (!user || user.email !== process.env.ADMIN_EMAIL?.trim()) return null;
   return user;
 }
 
