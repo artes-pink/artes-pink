@@ -74,8 +74,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const buffer = Buffer.from(await file.arrayBuffer());
     const r2Key = buildR2Key(uuid, orderItemId, file.name);
 
+    const BUCKET = process.env.R2_BUCKET_NAME!.trim();
+
     await r2.send(new PutObjectCommand({
-      Bucket: process.env.R2_BUCKET_NAME!,
+      Bucket: BUCKET,
       Key: r2Key,
       Body: buffer,
       ContentType: mimeType,
@@ -92,7 +94,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         fileSizeBytes: file.size,
         fileFormat: ALLOWED_TYPES[mimeType],
         status: 'pending',
-        r2Bucket: process.env.R2_BUCKET_NAME!,
+        r2Bucket: BUCKET,
         r2Key,
       })
       .returning();
