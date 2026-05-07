@@ -26,14 +26,22 @@ export async function generatePresignedUploadUrl(key: string): Promise<string> {
   return getSignedUrl(r2, command, { expiresIn: 3600 });
 }
 
-export async function generatePresignedDownloadUrl(key: string): Promise<string> {
-  const command = new GetObjectCommand({ Bucket: BUCKET, Key: key });
-  return getSignedUrl(r2, command, { expiresIn: 900 }); // 15 min for download
+export async function generatePresignedDownloadUrl(key: string, filename?: string): Promise<string> {
+  const command = new GetObjectCommand({
+    Bucket: BUCKET,
+    Key: key,
+    ResponseContentDisposition: `attachment; filename="${filename ?? key.split('/').pop()}"`,
+  });
+  return getSignedUrl(r2, command, { expiresIn: 900 });
 }
 
-export async function generateLongLivedDownloadUrl(key: string): Promise<string> {
-  const command = new GetObjectCommand({ Bucket: BUCKET, Key: key });
-  return getSignedUrl(r2, command, { expiresIn: 604800 }); // 7 days for email links
+export async function generateLongLivedDownloadUrl(key: string, filename?: string): Promise<string> {
+  const command = new GetObjectCommand({
+    Bucket: BUCKET,
+    Key: key,
+    ResponseContentDisposition: `attachment; filename="${filename ?? key.split('/').pop()}"`,
+  });
+  return getSignedUrl(r2, command, { expiresIn: 604800 });
 }
 
 export async function getFileBuffer(key: string): Promise<Buffer> {

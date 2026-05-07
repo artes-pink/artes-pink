@@ -17,7 +17,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: 'Archivo no encontrado' }, { status: 404 });
     }
 
-    const downloadUrl = await generatePresignedDownloadUrl(upload.r2Key);
+    const downloadUrl = await generatePresignedDownloadUrl(upload.r2Key, upload.filenameOriginal ?? undefined);
     return NextResponse.json({ downloadUrl, filename: upload.filenameOriginal });
   } catch (error) {
     console.error('GET /api/uploads/[uploadId]/download error:', error);

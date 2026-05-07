@@ -85,7 +85,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
 
         const emailUploads: UploadEmailInfo[] = await Promise.all(
           validUploads.map(async (u) => {
-            const downloadUrl = await generateLongLivedDownloadUrl(u.r2Key!);
+            const downloadUrl = await generateLongLivedDownloadUrl(u.r2Key!, u.filenameOriginal ?? undefined);
 
             let thumbnailBase64: string | undefined;
             const isImage = u.fileFormat === 'jpg' || u.fileFormat === 'png';
