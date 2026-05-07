@@ -1,9 +1,9 @@
 import xmlrpc from 'xmlrpc';
 
-const ODOO_URL = process.env.ODOO_URL!;
-const ODOO_DB = process.env.ODOO_DB!;
-const ODOO_USER = process.env.ODOO_USERNAME!;
-const ODOO_PASS = process.env.ODOO_PASSWORD!;
+const ODOO_URL = process.env.ODOO_URL!.trim();
+const ODOO_DB = process.env.ODOO_DB!.trim();
+const ODOO_USER = process.env.ODOO_USERNAME!.trim();
+const ODOO_PASS = process.env.ODOO_PASSWORD!.trim();
 
 function createClient(path: string) {
   const url = new URL(ODOO_URL);
