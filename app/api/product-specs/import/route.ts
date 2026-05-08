@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { productSpecs } from '@/lib/schema';
+import { productSpecs, orderItems } from '@/lib/schema';
 import * as xlsx from 'xlsx';
-import { sql } from 'drizzle-orm';
+import { sql, eq } from 'drizzle-orm';
 import { createSupabaseServerClient } from '@/lib/supabase-server';
 
 async function requireAdmin() {
@@ -143,6 +143,8 @@ export async function POST(request: NextRequest) {
     }
 
     if (replaceAll) {
+      // Null out FK references first, then delete, then re-link after insert
+      await db.update(orderItems).set({ specId: null });
       await db.delete(productSpecs);
     }
 
@@ -178,6 +180,18 @@ export async function POST(request: NextRequest) {
           notes: sql`excluded.notes`,
         },
       });
+
+    if (replaceAll) {
+      // Re-link order items to new specs by matching productCode
+      const newSpecs = await db.select({ id: productSpecs.id, productCode: productSpecs.productCode }).from(productSpecs);
+      await Promise.all(
+        newSpecs.map(s =>
+          db.update(orderItems)
+            .set({ specId: s.id })
+            .where(eq(orderItems.productCode, s.productCode))
+        )
+      );
+    }
 
     const digital = parsed.filter(r => r.widthPx !== null).length;
     const physical = parsed.length - digital;
