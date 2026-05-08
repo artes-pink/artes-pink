@@ -16,6 +16,8 @@ export const productSpecs = pgTable('product_specs', {
   // Metadata
   colorMode: varchar('color_mode', { length: 10 }),
   acceptedFormats: varchar('accepted_formats', { length: 100 }),
+  material: varchar('material', { length: 255 }),
+  durationSeconds: integer('duration_seconds'),
   notes: text('notes'),
   createdAt: timestamp('created_at').defaultNow(),
 });

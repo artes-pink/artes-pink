@@ -9,6 +9,7 @@ interface ProductSpec {
   productName: string;
   colorMode: string | null;
   acceptedFormats: string | null;
+  material: string | null;
   widthCm: string | null;
   heightCm: string | null;
   widthVisibleCm: string | null;
@@ -16,6 +17,7 @@ interface ProductSpec {
   resolutionDpi: number | null;
   widthPx: number | null;
   heightPx: number | null;
+  durationSeconds: number | null;
   notes: string | null;
 }
 
@@ -371,6 +373,7 @@ export default function SpecsPage() {
                     <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider">Zona visible</th>
                     <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider">DPI</th>
                     <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider">Formato</th>
+                    <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider">Material</th>
                     {isAdmin && <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider w-20" />}
                   </tr>
                 </thead>
@@ -411,6 +414,9 @@ export default function SpecsPage() {
                         </td>
                         <td className="px-4 py-3 text-xs text-gray-500">
                           {spec.acceptedFormats || <span className="text-gray-200">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-gray-500">
+                          {spec.material || <span className="text-gray-200">—</span>}
                         </td>
                         {isAdmin && (
                           <td className="px-4 py-3">

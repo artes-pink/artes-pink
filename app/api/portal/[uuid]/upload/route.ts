@@ -8,6 +8,25 @@ import { validateFile } from '@/lib/validation';
 
 export const maxDuration = 60;
 
+// Reads duration in seconds from MP4 buffer by parsing the mvhd box
+function readMp4DurationSeconds(buffer: Buffer): number | null {
+  const idx = buffer.indexOf(Buffer.from('mvhd'));
+  if (idx === -1) return null;
+  const version = buffer[idx + 4];
+  try {
+    if (version === 0) {
+      const timescale = buffer.readUInt32BE(idx + 16);
+      const duration = buffer.readUInt32BE(idx + 20);
+      return timescale > 0 ? duration / timescale : null;
+    } else if (version === 1) {
+      const timescale = buffer.readUInt32BE(idx + 24);
+      const duration = buffer.readUInt32BE(idx + 32);
+      return timescale > 0 ? duration / timescale : null;
+    }
+  } catch { /* buffer too short */ }
+  return null;
+}
+
 const ALLOWED_TYPES: Record<string, string> = {
   'image/png': 'png',
   'image/jpeg': 'jpg',
@@ -107,8 +126,27 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       .where(eq(orderItems.id, orderItemId))
       .limit(1);
 
-    // MP4: accept without dimension validation
+    // MP4: validate duration against spec (digital products require exact seconds)
     if (mimeType === 'video/mp4') {
+      const requiredSeconds = itemWithSpec?.spec?.durationSeconds ?? null;
+      const detectedSeconds = readMp4DurationSeconds(buffer);
+
+      if (requiredSeconds !== null && detectedSeconds !== null) {
+        const diff = Math.abs(detectedSeconds - requiredSeconds);
+        if (diff > 0.5) {
+          await db
+            .update(uploads)
+            .set({ status: 'invalid', validationErrors: [`El video debe durar exactamente ${requiredSeconds} segundos. Tu archivo dura ${detectedSeconds.toFixed(1)} segundos.`], validatedAt: new Date(), updatedAt: new Date() })
+            .where(eq(uploads.id, upload.id));
+          return NextResponse.json({
+            valid: false,
+            errors: [`El video debe durar exactamente ${requiredSeconds} segundos. Tu archivo dura ${detectedSeconds.toFixed(1)} segundos.`],
+            warnings: [],
+            detected: { durationSeconds: detectedSeconds },
+          });
+        }
+      }
+
       await db
         .update(uploads)
         .set({ status: 'valid', validatedAt: new Date(), updatedAt: new Date() })
@@ -116,9 +154,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
       return NextResponse.json({
         valid: true,
-        warnings: ['Los archivos de video MP4 se aceptan sin validación automática de dimensiones.'],
+        warnings: detectedSeconds ? [] : ['No se pudo verificar la duración del video automáticamente.'],
         errors: [],
-        detected: {},
+        detected: { durationSeconds: detectedSeconds ?? undefined },
       });
     }
 

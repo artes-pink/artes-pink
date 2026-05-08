@@ -17,6 +17,7 @@ interface SpecRow {
   productName: string;
   colorMode: string | null;
   acceptedFormats: string | null;
+  material: string | null;
   // Physical (CMYK)
   widthCm: number | null;
   heightCm: number | null;
@@ -26,6 +27,7 @@ interface SpecRow {
   // Digital (RGB)
   widthPx: number | null;
   heightPx: number | null;
+  durationSeconds: number | null;
   notes: string | null;
 }
 
@@ -66,6 +68,7 @@ function parseExcelRow(row: Record<string, unknown>): SpecRow | null {
 
   const colorMode = String(row['CODIGO DE COLOR'] ?? row['color_mode'] ?? row['Código de color'] ?? '').trim() || null;
   const acceptedFormats = String(row['FORMATO'] ?? row['formato'] ?? '').trim() || null;
+  const material = String(row['MATERIAL'] ?? row['material'] ?? row['Material'] ?? '').trim() || null;
 
   const dpiRaw = String(row['DPI'] ?? row['dpi'] ?? row['RESOLUCIÓN'] ?? row['Resolución'] ?? row['Resolucion'] ?? row['RESOLUCION'] ?? row['resolution_dpi'] ?? '').trim();
   const resolutionDpi = dpiRaw ? parseInt(dpiRaw.replace(/[^\d]/g, ''), 10) || null : null;
@@ -78,6 +81,7 @@ function parseExcelRow(row: Record<string, unknown>): SpecRow | null {
       productName: name,
       colorMode,
       acceptedFormats,
+      material,
       widthCm: null,
       heightCm: null,
       widthVisibleCm: null,
@@ -85,6 +89,7 @@ function parseExcelRow(row: Record<string, unknown>): SpecRow | null {
       resolutionDpi,
       widthPx: areaTotal.widthPx,
       heightPx: areaTotal.heightPx,
+      durationSeconds: 10,
       notes: null,
     };
   }
@@ -97,6 +102,7 @@ function parseExcelRow(row: Record<string, unknown>): SpecRow | null {
     productName: name,
     colorMode,
     acceptedFormats,
+    material,
     widthCm: areaTotal.widthCm,
     heightCm: areaTotal.heightCm,
     widthVisibleCm: areaVisible.widthCm,
@@ -104,6 +110,7 @@ function parseExcelRow(row: Record<string, unknown>): SpecRow | null {
     resolutionDpi,
     widthPx: null,
     heightPx: null,
+    durationSeconds: null,
     notes: null,
   };
 }
@@ -155,6 +162,7 @@ export async function POST(request: NextRequest) {
         productName: s.productName,
         colorMode: s.colorMode,
         acceptedFormats: s.acceptedFormats,
+        material: s.material,
         widthCm: s.widthCm?.toString() ?? null,
         heightCm: s.heightCm?.toString() ?? null,
         widthVisibleCm: s.widthVisibleCm?.toString() ?? null,
@@ -162,6 +170,7 @@ export async function POST(request: NextRequest) {
         resolutionDpi: s.resolutionDpi,
         widthPx: s.widthPx,
         heightPx: s.heightPx,
+        durationSeconds: s.durationSeconds,
         notes: s.notes,
       })))
       .onConflictDoUpdate({
@@ -170,6 +179,7 @@ export async function POST(request: NextRequest) {
           productName: sql`excluded.product_name`,
           colorMode: sql`excluded.color_mode`,
           acceptedFormats: sql`excluded.accepted_formats`,
+          material: sql`excluded.material`,
           widthCm: sql`excluded.width_cm`,
           heightCm: sql`excluded.height_cm`,
           widthVisibleCm: sql`excluded.width_visible_cm`,
@@ -177,6 +187,7 @@ export async function POST(request: NextRequest) {
           resolutionDpi: sql`excluded.resolution_dpi`,
           widthPx: sql`excluded.width_px`,
           heightPx: sql`excluded.height_px`,
+          durationSeconds: sql`excluded.duration_seconds`,
           notes: sql`excluded.notes`,
         },
       });
