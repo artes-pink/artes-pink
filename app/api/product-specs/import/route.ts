@@ -3,6 +3,14 @@ import { db } from '@/lib/db';
 import { productSpecs } from '@/lib/schema';
 import * as xlsx from 'xlsx';
 import { sql } from 'drizzle-orm';
+import { createSupabaseServerClient } from '@/lib/supabase-server';
+
+async function requireAdmin() {
+  const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user || user.email !== process.env.ADMIN_EMAIL?.trim()) return null;
+  return user;
+}
 
 interface SpecRow {
   productCode: string;
@@ -59,6 +67,9 @@ function parseExcelRow(row: Record<string, unknown>): SpecRow | null {
   const colorMode = String(row['CODIGO DE COLOR'] ?? row['color_mode'] ?? row['Código de color'] ?? '').trim() || null;
   const acceptedFormats = String(row['FORMATO'] ?? row['formato'] ?? '').trim() || null;
 
+  const dpiRaw = String(row['DPI'] ?? row['dpi'] ?? row['Resolución'] ?? row['Resolucion'] ?? row['RESOLUCION'] ?? row['resolution_dpi'] ?? '').trim();
+  const resolutionDpi = dpiRaw ? parseInt(dpiRaw.replace(/[^\d]/g, ''), 10) || null : null;
+
   const isDigital = areaTotal.widthPx !== null;
 
   if (isDigital) {
@@ -71,7 +82,7 @@ function parseExcelRow(row: Record<string, unknown>): SpecRow | null {
       heightCm: null,
       widthVisibleCm: null,
       heightVisibleCm: null,
-      resolutionDpi: null,
+      resolutionDpi,
       widthPx: areaTotal.widthPx,
       heightPx: areaTotal.heightPx,
       notes: null,
@@ -90,7 +101,7 @@ function parseExcelRow(row: Record<string, unknown>): SpecRow | null {
     heightCm: areaTotal.heightCm,
     widthVisibleCm: areaVisible.widthCm,
     heightVisibleCm: areaVisible.heightCm,
-    resolutionDpi: null,
+    resolutionDpi,
     widthPx: null,
     heightPx: null,
     notes: null,
@@ -99,8 +110,14 @@ function parseExcelRow(row: Record<string, unknown>): SpecRow | null {
 
 export async function POST(request: NextRequest) {
   try {
+    const admin = await requireAdmin();
+    if (!admin) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
+    }
+
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
+    const replaceAll = formData.get('replace') === 'true';
 
     if (!file) {
       return NextResponse.json({ error: 'No se recibió ningún archivo' }, { status: 400 });
@@ -123,6 +140,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         error: 'No se encontraron filas válidas. Verifica que el archivo tenga las columnas: ID, Nombre, AREA TOTAL, CODIGO DE COLOR, FORMATO.',
       }, { status: 400 });
+    }
+
+    if (replaceAll) {
+      await db.delete(productSpecs);
     }
 
     await db

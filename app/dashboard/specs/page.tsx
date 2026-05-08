@@ -115,6 +115,7 @@ export default function SpecsPage() {
 
   // Import Excel
   const [uploading, setUploading] = useState(false);
+  const [replaceAll, setReplaceAll] = useState(false);
   const [importResult, setImportResult] = useState<{ success?: boolean; message?: string; error?: string } | null>(null);
 
   // Delete
@@ -201,6 +202,7 @@ export default function SpecsPage() {
     setImportResult(null);
     const formData = new FormData();
     formData.append('file', file);
+    if (replaceAll) formData.append('replace', 'true');
     const res = await fetch('/api/product-specs/import', { method: 'POST', body: formData });
     const data = await res.json();
     if (res.ok) {
@@ -460,10 +462,22 @@ export default function SpecsPage() {
             <div className="px-5 pb-5 pt-1 border-t border-gray-100">
               <p className="text-xs text-gray-400 mb-4 leading-relaxed">
                 Importa múltiples especificaciones a la vez. El archivo debe tener las columnas:{' '}
-                {['ID', 'Nombre', 'AREA TOTAL', 'AREA VISIBLE', 'CODIGO DE COLOR', 'FORMATO'].map(col => (
+                {['ID', 'Nombre', 'AREA TOTAL', 'AREA VISIBLE', 'CODIGO DE COLOR', 'FORMATO', 'DPI'].map(col => (
                   <code key={col} className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-xs mx-0.5">{col}</code>
                 ))}
               </p>
+              <label className="flex items-center gap-2 mb-4 cursor-pointer select-none w-fit">
+                <input
+                  type="checkbox"
+                  checked={replaceAll}
+                  onChange={e => setReplaceAll(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300 text-[#B03060] accent-[#B03060]"
+                />
+                <span className="text-sm text-gray-600">
+                  Reemplazar todas las specs existentes{' '}
+                  <span className="text-gray-400 font-normal">(borra todo antes de importar)</span>
+                </span>
+              </label>
               <label className="inline-flex items-center gap-2 px-4 py-2.5 border border-gray-200 text-gray-600 text-sm font-semibold rounded-lg hover:bg-gray-50 cursor-pointer transition-all">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
