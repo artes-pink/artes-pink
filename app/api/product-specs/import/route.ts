@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { productSpecs, orderItems } from '@/lib/schema';
+import { productSpecs } from '@/lib/schema';
 import * as xlsx from 'xlsx';
-import { sql, eq } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import { createSupabaseServerClient } from '@/lib/supabase-server';
 
 async function requireAdmin() {
@@ -67,7 +67,7 @@ function parseExcelRow(row: Record<string, unknown>): SpecRow | null {
   const colorMode = String(row['CODIGO DE COLOR'] ?? row['color_mode'] ?? row['Código de color'] ?? '').trim() || null;
   const acceptedFormats = String(row['FORMATO'] ?? row['formato'] ?? '').trim() || null;
 
-  const dpiRaw = String(row['DPI'] ?? row['dpi'] ?? row['Resolución'] ?? row['Resolucion'] ?? row['RESOLUCION'] ?? row['resolution_dpi'] ?? '').trim();
+  const dpiRaw = String(row['DPI'] ?? row['dpi'] ?? row['RESOLUCIÓN'] ?? row['Resolución'] ?? row['Resolucion'] ?? row['RESOLUCION'] ?? row['resolution_dpi'] ?? '').trim();
   const resolutionDpi = dpiRaw ? parseInt(dpiRaw.replace(/[^\d]/g, ''), 10) || null : null;
 
   const isDigital = areaTotal.widthPx !== null;
@@ -143,9 +143,9 @@ export async function POST(request: NextRequest) {
     }
 
     if (replaceAll) {
-      // Null out FK references first, then delete, then re-link after insert
-      await db.update(orderItems).set({ specId: null });
-      await db.delete(productSpecs);
+      // Null out FK references first, then delete (raw SQL to avoid drizzle WHERE requirement)
+      await db.execute(sql`UPDATE order_items SET spec_id = NULL`);
+      await db.execute(sql`DELETE FROM product_specs`);
     }
 
     await db
@@ -182,15 +182,13 @@ export async function POST(request: NextRequest) {
       });
 
     if (replaceAll) {
-      // Re-link order items to new specs by matching productCode
-      const newSpecs = await db.select({ id: productSpecs.id, productCode: productSpecs.productCode }).from(productSpecs);
-      await Promise.all(
-        newSpecs.map(s =>
-          db.update(orderItems)
-            .set({ specId: s.id })
-            .where(eq(orderItems.productCode, s.productCode))
-        )
-      );
+      // Re-link order items to new specs by matching productCode (single query)
+      await db.execute(sql`
+        UPDATE order_items oi
+        SET spec_id = ps.id
+        FROM product_specs ps
+        WHERE oi.product_code = ps.product_code
+      `);
     }
 
     const digital = parsed.filter(r => r.widthPx !== null).length;
@@ -205,6 +203,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('POST /api/product-specs/import error:', error);
-    return NextResponse.json({ error: 'Error al importar el archivo' }, { status: 500 });
+    const msg = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: `Error al importar el archivo: ${msg}` }, { status: 500 });
   }
 }
