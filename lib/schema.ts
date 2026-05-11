@@ -40,6 +40,7 @@ export const orders = pgTable('orders', {
   clientName: varchar('client_name', { length: 255 }).notNull(),
   clientEmail: varchar('client_email', { length: 255 }),
   odooRawData: jsonb('odoo_raw_data'),
+  sentToPrintAt: timestamp('sent_to_print_at'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
@@ -87,6 +88,14 @@ export const uploads = pgTable('uploads', {
   r2Key: varchar('r2_key', { length: 500 }),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+export const printJobItems = pgTable('print_job_items', {
+  id: serial('id').primaryKey(),
+  orderId: integer('order_id').references(() => orders.id, { onDelete: 'cascade' }).notNull(),
+  orderItemId: integer('order_item_id').references(() => orderItems.id, { onDelete: 'cascade' }).notNull(),
+  supplierId: integer('supplier_id').references(() => suppliers.id, { onDelete: 'set null' }),
+  sentAt: timestamp('sent_at').defaultNow(),
 });
 
 export type ProductSpec = typeof productSpecs.$inferSelect;

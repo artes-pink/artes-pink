@@ -117,6 +117,99 @@ export async function sendOrderReadyNotification(params: {
   });
 }
 
+export async function sendToPrintNotification(params: {
+  supplierName: string;
+  supplierEmail: string;
+  orderNumber: string;
+  clientName: string;
+  items: {
+    productName: string;
+    productCode: string;
+    quantity: number;
+    material: string | null;
+    widthCm: string | null;
+    heightCm: string | null;
+    widthPx: number | null;
+    heightPx: number | null;
+    colorMode: string | null;
+    filename: string | null;
+    downloadUrl: string | null;
+  }[];
+}): Promise<void> {
+  const { supplierName, supplierEmail, orderNumber, clientName, items } = params;
+
+  const itemRows = items.map(item => {
+    const dims = item.widthPx
+      ? `${item.widthPx} × ${item.heightPx} px`
+      : item.widthCm
+        ? `${parseFloat(item.widthCm)} × ${parseFloat(item.heightCm ?? '0')} m`
+        : '—';
+
+    const downloadBtn = item.downloadUrl
+      ? `<a href="${item.downloadUrl}" style="display:inline-block;background:#B03060;color:#fff;padding:6px 14px;border-radius:5px;text-decoration:none;font-size:12px;font-weight:700;">Descargar arte</a>`
+      : '<span style="font-size:12px;color:#9ca3af;">Sin archivo</span>';
+
+    return `
+      <tr style="border-bottom:1px solid #f3f4f6;">
+        <td style="padding:12px 14px;vertical-align:top;">
+          <div style="font-size:13px;font-weight:600;color:#111827;">${item.productName}</div>
+          <div style="font-size:11px;color:#6b7280;margin-top:2px;">Código: ${item.productCode}</div>
+          ${item.material ? `<div style="font-size:11px;color:#6b7280;margin-top:1px;">Material: ${item.material}</div>` : ''}
+        </td>
+        <td style="padding:12px 14px;vertical-align:top;white-space:nowrap;">
+          <div style="font-size:13px;color:#374151;">${dims}</div>
+          ${item.colorMode ? `<div style="font-size:11px;color:#6b7280;margin-top:2px;">${item.colorMode}</div>` : ''}
+        </td>
+        <td style="padding:12px 14px;vertical-align:top;text-align:center;">
+          <div style="font-size:13px;font-weight:600;color:#374151;">×${item.quantity}</div>
+        </td>
+        <td style="padding:12px 14px;vertical-align:top;text-align:right;">${downloadBtn}</td>
+      </tr>`;
+  }).join('');
+
+  await resend.emails.send({
+    from: FROM,
+    to: supplierEmail,
+    subject: `Orden de impresión: ${orderNumber} — Pink Connections`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <body style="font-family:'Helvetica Neue',Arial,sans-serif;max-width:640px;margin:0 auto;padding:24px;background:#ffffff;color:#111827;">
+        <div style="border-top:3px solid #B03060;border-radius:8px 8px 0 0;"></div>
+        <div style="background:#f9fafb;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:24px;">
+
+          <div style="margin-bottom:20px;">
+            <div style="font-size:18px;font-weight:700;color:#111827;margin-bottom:4px;">Orden de impresión</div>
+            <div style="font-size:13px;color:#6b7280;">Pedido <strong>${orderNumber}</strong> · Cliente: <strong>${clientName}</strong></div>
+          </div>
+
+          <p style="font-size:14px;color:#374151;line-height:1.6;margin:0 0 20px 0;">
+            Hola <strong>${supplierName}</strong>, adjuntamos los artes aprobados para producción. Por favor descarga cada archivo y procede con la impresión según las especificaciones indicadas.
+          </p>
+
+          <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;border-collapse:collapse;background:#ffffff;">
+            <thead>
+              <tr style="background:#f3f4f6;">
+                <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.06em;">Producto</th>
+                <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.06em;">Medidas</th>
+                <th style="padding:10px 14px;text-align:center;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.06em;">Cant.</th>
+                <th style="padding:10px 14px;text-align:right;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.06em;">Arte</th>
+              </tr>
+            </thead>
+            <tbody>${itemRows}</tbody>
+          </table>
+
+          <p style="font-size:12px;color:#9ca3af;margin-top:16px;">Los links de descarga son válidos por 7 días.</p>
+        </div>
+        <p style="font-size:11px;color:#9ca3af;margin-top:20px;text-align:center;">
+          Pink Connections · Sistema de Artes OOH
+        </p>
+      </body>
+      </html>
+    `,
+  });
+}
+
 export async function sendClientUploadLink(params: {
   clientEmail: string;
   clientName: string;

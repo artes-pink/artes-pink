@@ -15,7 +15,16 @@ interface Spec {
   heightPx: number | null;
   colorMode: string | null;
   acceptedFormats: string | null;
+  material: string | null;
+  supplierId: number | null;
   notes: string | null;
+}
+
+interface Supplier {
+  id: number;
+  name: string;
+  email: string;
+  materials: string | null;
 }
 
 interface OrderItem {
@@ -52,7 +61,7 @@ interface LinkWithUploads {
 }
 
 interface OrderDetail {
-  order: { id: number; odooOrderId: string; clientName: string; clientEmail: string | null };
+  order: { id: number; odooOrderId: string; clientName: string; clientEmail: string | null; sentToPrintAt: string | null };
   items: OrderItem[];
   links: LinkWithUploads[];
 }
@@ -112,6 +121,11 @@ export default function OrderDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [resyncing, setResyncing] = useState(false);
   const [deletingLinkId, setDeletingLinkId] = useState<number | null>(null);
+  const [allSuppliers, setAllSuppliers] = useState<Supplier[]>([]);
+  const [showPrintPanel, setShowPrintPanel] = useState(false);
+  const [assignments, setAssignments] = useState<Record<number, number>>({});
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     const res = await fetch(`/api/orders/${orderId}`);
@@ -120,7 +134,10 @@ export default function OrderDetailPage() {
     setLoading(false);
   }, [orderId]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    fetchData();
+    fetch('/api/suppliers').then(r => r.ok ? r.json() : []).then(d => setAllSuppliers(Array.isArray(d) ? d : []));
+  }, [fetchData]);
 
   async function generateLink() {
     setGeneratingLink(true);
@@ -176,6 +193,33 @@ export default function OrderDetailPage() {
     setTimeout(() => setCopiedId(null), 2000);
   }
 
+  function suppliersForMaterial(material: string | null | undefined): Supplier[] {
+    if (!material) return allSuppliers;
+    return allSuppliers.filter(s =>
+      s.materials?.split(',').some(m => m.trim().toLowerCase() === material.toLowerCase())
+    );
+  }
+
+  async function sendToPrint() {
+    const assignmentList = Object.entries(assignments).map(([itemId, supplierId]) => ({
+      itemId: parseInt(itemId),
+      supplierId,
+    }));
+    if (!assignmentList.length) { setSendError('Asigna al menos un proveedor'); return; }
+    setSending(true);
+    setSendError(null);
+    const res = await fetch(`/api/orders/${orderId}/send-to-print`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assignments: assignmentList }),
+    });
+    const json = await res.json();
+    if (!res.ok) { setSendError(json.error ?? 'Error al enviar'); setSending(false); return; }
+    setSending(false);
+    setShowPrintPanel(false);
+    fetchData();
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#F5F4F2] flex items-center justify-center">
@@ -217,6 +261,17 @@ export default function OrderDetailPage() {
             )}
           </div>
           <div className="flex items-center gap-2">
+            {hasAnyValidLink && (
+              <button
+                onClick={() => { setShowPrintPanel(p => !p); setSendError(null); }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-[#B03060] border border-[#B03060] rounded-lg hover:bg-[#9a2754] active:scale-[0.98] transition-all"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z" />
+                </svg>
+                {data?.order.sentToPrintAt ? 'Re-enviar a impresión' : 'Enviar a impresión'}
+              </button>
+            )}
             <button
               onClick={resyncOrder}
               disabled={resyncing}
@@ -242,6 +297,90 @@ export default function OrderDetailPage() {
       </header>
 
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-5">
+
+        {/* Send to print panel */}
+        {showPrintPanel && (() => {
+          const itemsWithUploads = items.filter(item =>
+            !item.excludedFromPortal && (item.latestUpload?.status === 'valid' || links.some(l => l.allUploadedAt))
+          );
+          return (
+            <div className="bg-white rounded-xl border border-[#B03060]/20 shadow-[0_1px_3px_rgba(0,0,0,0.08)] p-6">
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <h2 className="text-sm font-semibold text-gray-900">Enviar a impresión</h2>
+                  <p className="text-xs text-gray-400 mt-0.5">Asigna un proveedor a cada producto y confirma el envío.</p>
+                </div>
+                <button onClick={() => setShowPrintPanel(false)} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+
+              {itemsWithUploads.length === 0 ? (
+                <p className="text-sm text-gray-400 py-4 text-center">No hay productos con artes válidos.</p>
+              ) : (
+                <div className="space-y-3">
+                  {itemsWithUploads.map(item => {
+                    const options = suppliersForMaterial(item.spec?.material);
+                    return (
+                      <div key={item.id} className="flex items-center gap-4 p-3.5 border border-gray-100 rounded-lg bg-gray-50/60">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-gray-900 truncate">{item.productName}</div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            {item.spec?.material && (
+                              <span className="text-xs text-gray-400">{item.spec.material}</span>
+                            )}
+                            {item.spec?.colorMode && (
+                              <span className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded">{item.spec.colorMode}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="shrink-0 w-56">
+                          {options.length === 0 ? (
+                            <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                              Ningún proveedor maneja <em>{item.spec?.material || 'este material'}</em>
+                            </p>
+                          ) : (
+                            <select
+                              value={assignments[item.id] ?? ''}
+                              onChange={e => setAssignments(prev => ({ ...prev, [item.id]: parseInt(e.target.value) }))}
+                              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-[#B03060] focus:ring-1 focus:ring-[#B03060]/20"
+                            >
+                              <option value="">— Seleccionar proveedor</option>
+                              {options.map(s => (
+                                <option key={s.id} value={s.id}>{s.name}</option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {sendError && <p className="mt-3 text-xs text-red-500">{sendError}</p>}
+
+              <div className="flex items-center gap-3 mt-5">
+                <button
+                  onClick={sendToPrint}
+                  disabled={sending || itemsWithUploads.length === 0}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#B03060] text-white text-sm font-semibold rounded-lg hover:bg-[#9a2754] disabled:opacity-50 transition-colors"
+                >
+                  {sending ? 'Enviando...' : 'Confirmar y enviar'}
+                </button>
+                <button onClick={() => setShowPrintPanel(false)} className="px-4 py-2.5 text-sm text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                  Cancelar
+                </button>
+                {data?.order.sentToPrintAt && (
+                  <span className="ml-auto text-xs text-gray-400">
+                    Enviado el {new Date(data.order.sentToPrintAt).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Client info */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-5">
           <SectionHeader>Cliente</SectionHeader>

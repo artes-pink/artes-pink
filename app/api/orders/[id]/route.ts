@@ -32,6 +32,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           heightPx: productSpecs.heightPx,
           colorMode: productSpecs.colorMode,
           acceptedFormats: productSpecs.acceptedFormats,
+          material: productSpecs.material,
+          supplierId: productSpecs.supplierId,
           notes: productSpecs.notes,
         },
       })
