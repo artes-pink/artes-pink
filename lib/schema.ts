@@ -1,5 +1,15 @@
 import { pgTable, serial, varchar, text, decimal, integer, boolean, timestamp, jsonb, uuid } from 'drizzle-orm/pg-core';
 
+export const suppliers = pgTable('suppliers', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 255 }).notNull(),
+  email: varchar('email', { length: 255 }).notNull(),
+  phone: varchar('phone', { length: 50 }),
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
 export const productSpecs = pgTable('product_specs', {
   id: serial('id').primaryKey(),
   productCode: varchar('product_code', { length: 100 }).unique().notNull(),
@@ -18,6 +28,7 @@ export const productSpecs = pgTable('product_specs', {
   acceptedFormats: varchar('accepted_formats', { length: 100 }),
   material: varchar('material', { length: 255 }),
   durationSeconds: integer('duration_seconds'),
+  supplierId: integer('supplier_id').references(() => suppliers.id, { onDelete: 'set null' }),
   notes: text('notes'),
   createdAt: timestamp('created_at').defaultNow(),
 });

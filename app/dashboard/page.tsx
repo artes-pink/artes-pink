@@ -134,6 +134,12 @@ export default function DashboardPage() {
             >
               Especificaciones
             </Link>
+            <Link
+              href="/dashboard/suppliers"
+              className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors font-medium"
+            >
+              Proveedores
+            </Link>
             {currentUserEmail === 'pablo@pinkconnections.com' && (
               <Link
                 href="/dashboard/users"

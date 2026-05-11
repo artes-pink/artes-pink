@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { productSpecs } from '@/lib/schema';
+import { productSpecs, suppliers } from '@/lib/schema';
 import * as xlsx from 'xlsx';
-import { sql } from 'drizzle-orm';
+import { sql, ilike } from 'drizzle-orm';
 import { createSupabaseServerClient } from '@/lib/supabase-server';
 
 async function requireAdmin() {
@@ -18,6 +18,7 @@ interface SpecRow {
   colorMode: string | null;
   acceptedFormats: string | null;
   material: string | null;
+  supplierName: string | null;
   // Physical (CMYK)
   widthCm: number | null;
   heightCm: number | null;
@@ -69,6 +70,7 @@ function parseExcelRow(row: Record<string, unknown>): SpecRow | null {
   const colorMode = String(row['CODIGO DE COLOR'] ?? row['color_mode'] ?? row['Código de color'] ?? '').trim() || null;
   const acceptedFormats = String(row['FORMATO'] ?? row['formato'] ?? '').trim() || null;
   const material = String(row['MATERIAL'] ?? row['material'] ?? row['Material'] ?? '').trim() || null;
+  const supplierName = String(row['PROVEEDOR'] ?? row['proveedor'] ?? row['Proveedor'] ?? row['SUPPLIER'] ?? '').trim() || null;
 
   const dpiRaw = String(row['DPI'] ?? row['dpi'] ?? row['RESOLUCIÓN'] ?? row['Resolución'] ?? row['Resolucion'] ?? row['RESOLUCION'] ?? row['resolution_dpi'] ?? '').trim();
   const resolutionDpi = dpiRaw ? parseInt(dpiRaw.replace(/[^\d]/g, ''), 10) || null : null;
@@ -82,6 +84,7 @@ function parseExcelRow(row: Record<string, unknown>): SpecRow | null {
       colorMode,
       acceptedFormats,
       material,
+      supplierName,
       widthCm: null,
       heightCm: null,
       widthVisibleCm: null,
@@ -103,6 +106,7 @@ function parseExcelRow(row: Record<string, unknown>): SpecRow | null {
     colorMode,
     acceptedFormats,
     material,
+    supplierName,
     widthCm: areaTotal.widthCm,
     heightCm: areaTotal.heightCm,
     widthVisibleCm: areaVisible.widthCm,
@@ -155,6 +159,17 @@ export async function POST(request: NextRequest) {
       await db.execute(sql`DELETE FROM product_specs`);
     }
 
+    // Resolve supplier names to IDs
+    const uniqueSupplierNames = [...new Set(parsed.map(r => r.supplierName).filter(Boolean) as string[])];
+    const supplierMap = new Map<string, number>();
+    for (const supplierName of uniqueSupplierNames) {
+      const [found] = await db.select({ id: suppliers.id, name: suppliers.name })
+        .from(suppliers)
+        .where(ilike(suppliers.name, supplierName))
+        .limit(1);
+      if (found) supplierMap.set(supplierName.toLowerCase(), found.id);
+    }
+
     await db
       .insert(productSpecs)
       .values(parsed.map(s => ({
@@ -163,6 +178,7 @@ export async function POST(request: NextRequest) {
         colorMode: s.colorMode,
         acceptedFormats: s.acceptedFormats,
         material: s.material,
+        supplierId: s.supplierName ? (supplierMap.get(s.supplierName.toLowerCase()) ?? null) : null,
         widthCm: s.widthCm?.toString() ?? null,
         heightCm: s.heightCm?.toString() ?? null,
         widthVisibleCm: s.widthVisibleCm?.toString() ?? null,
@@ -180,6 +196,7 @@ export async function POST(request: NextRequest) {
           colorMode: sql`excluded.color_mode`,
           acceptedFormats: sql`excluded.accepted_formats`,
           material: sql`excluded.material`,
+          supplierId: sql`excluded.supplier_id`,
           widthCm: sql`excluded.width_cm`,
           heightCm: sql`excluded.height_cm`,
           widthVisibleCm: sql`excluded.width_visible_cm`,
