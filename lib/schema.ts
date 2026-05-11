@@ -5,6 +5,7 @@ export const suppliers = pgTable('suppliers', {
   name: varchar('name', { length: 255 }).notNull(),
   email: varchar('email', { length: 255 }).notNull(),
   phone: varchar('phone', { length: 50 }),
+  materials: text('materials'), // comma-separated list of material names this supplier handles
   notes: text('notes'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),

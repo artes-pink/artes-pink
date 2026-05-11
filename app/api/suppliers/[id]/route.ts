@@ -17,7 +17,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
   const { id } = await params;
   const body = await request.json();
-  const { name, email, phone, notes } = body;
+  const { name, email, phone, materials, notes } = body;
 
   if (!name?.trim() || !email?.trim()) {
     return NextResponse.json({ error: 'Nombre y email son requeridos' }, { status: 400 });
@@ -27,6 +27,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     name: name.trim(),
     email: email.trim(),
     phone: phone?.trim() || null,
+    materials: materials?.trim() || null,
     notes: notes?.trim() || null,
     updatedAt: new Date(),
   }).where(eq(suppliers.id, parseInt(id))).returning();

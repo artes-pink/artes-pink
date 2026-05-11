@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
   if (!admin) return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
 
   const body = await request.json();
-  const { name, email, phone, notes } = body;
+  const { name, email, phone, materials, notes } = body;
 
   if (!name?.trim() || !email?.trim()) {
     return NextResponse.json({ error: 'Nombre y email son requeridos' }, { status: 400 });
@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
     name: name.trim(),
     email: email.trim(),
     phone: phone?.trim() || null,
+    materials: materials?.trim() || null,
     notes: notes?.trim() || null,
   }).returning();
 
