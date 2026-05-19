@@ -8,6 +8,11 @@ function isWithinTolerance(actual: number, expected: number): boolean {
   return Math.abs(actual - expected) <= tolerance;
 }
 
+// Returns true if detected×100 matches expected — i.e. file was made with cm units instead of meters
+function matchesAsCentimeters(detectedM: number, expectedM: number): boolean {
+  return isWithinTolerance(detectedM * 100, expectedM);
+}
+
 export interface ValidationResult {
   valid: boolean;
   errors: string[];
@@ -104,6 +109,23 @@ export async function validateRasterImage(buffer: Buffer, spec: FileSpec): Promi
     const orientationSwapped =
       isWithinTolerance(widthPx, requiredHeightPx) && isWithinTolerance(heightPx, requiredWidthPx);
 
+    // Detect cm-interpretation: pixels are 100× smaller than expected (file made in cm)
+    const cmInterpretation =
+      matchesAsCentimeters(detectedWidthM, spec.widthCm) && matchesAsCentimeters(detectedHeightM, spec.heightCm);
+
+    if (cmInterpretation) {
+      warnings.push(
+        `Tu imagen fue exportada con medidas en centímetros (${(detectedWidthM * 100).toFixed(1)}×${(detectedHeightM * 100).toFixed(1)} cm) ` +
+        `en vez de metros. Los valores coinciden, lo aceptamos automáticamente. Recomendamos exportar en metros.`
+      );
+      return {
+        valid: true,
+        errors: [],
+        warnings,
+        detected: { widthPx, heightPx, dpi: dpi ?? undefined, widthCm: detectedWidthM * 100, heightCm: detectedHeightM * 100, format: metadata.format },
+      };
+    }
+
     if (orientationSwapped) {
       errors.push(
         `Las medidas están invertidas: tu imagen está en formato ${widthPx > heightPx ? 'horizontal' : 'vertical'} ` +
@@ -137,6 +159,23 @@ export async function validateRasterImage(buffer: Buffer, spec: FileSpec): Promi
 
     const orientationSwapped =
       isWithinTolerance(detectedWidthM, spec.heightCm) && isWithinTolerance(detectedHeightM, spec.widthCm);
+
+    // Detect cm-interpretation here too
+    const cmInterpretation =
+      matchesAsCentimeters(detectedWidthM, spec.widthCm) && matchesAsCentimeters(detectedHeightM, spec.heightCm);
+
+    if (cmInterpretation) {
+      warnings.push(
+        `Tu imagen fue exportada en centímetros (${(detectedWidthM * 100).toFixed(1)}×${(detectedHeightM * 100).toFixed(1)} cm) ` +
+        `en vez de metros. Los valores coinciden, lo aceptamos automáticamente.`
+      );
+      return {
+        valid: true,
+        errors: [],
+        warnings,
+        detected: { widthPx, heightPx, dpi, widthCm: detectedWidthM * 100, heightCm: detectedHeightM * 100, format: metadata.format },
+      };
+    }
 
     if (orientationSwapped) {
       errors.push(`Las medidas están invertidas: tu imagen mide ${detectedWidthM}×${detectedHeightM}m pero se requiere ${spec.widthCm}×${spec.heightCm}m.`);
@@ -200,6 +239,29 @@ export async function validatePDF(buffer: Buffer, spec: FileSpec): Promise<Valid
 
   const orientationSwapped =
     isWithinTolerance(detectedWidthM, spec.heightCm) && isWithinTolerance(detectedHeightM, spec.widthCm);
+
+  // Detect if the file was made in cm instead of meters (numbers match at 100x scale)
+  const cmInterpretation =
+    matchesAsCentimeters(detectedWidthM, spec.widthCm) && matchesAsCentimeters(detectedHeightM, spec.heightCm);
+  const cmInterpretationSwapped =
+    matchesAsCentimeters(detectedWidthM, spec.heightCm) && matchesAsCentimeters(detectedHeightM, spec.widthCm);
+
+  if (cmInterpretation || cmInterpretationSwapped) {
+    // Accept with warning — client likely used cm as the unit instead of meters
+    warnings.push(
+      `Tu PDF fue exportado en centímetros (${detectedWidthM * 100}×${detectedHeightM * 100} cm) en vez de metros. ` +
+      `Las medidas coinciden con lo requerido, lo aceptamos automáticamente. Recomendamos exportar en metros para evitar confusiones.`
+    );
+    if (cmInterpretationSwapped) {
+      warnings.push('La orientación del PDF está invertida pero los valores coinciden — verifica que la rotación sea correcta antes de imprimir.');
+    }
+    return {
+      valid: true,
+      errors: [],
+      warnings,
+      detected: { widthCm: detectedWidthM * 100, heightCm: detectedHeightM * 100, format: 'pdf' },
+    };
+  }
 
   if (orientationSwapped) {
     errors.push(
