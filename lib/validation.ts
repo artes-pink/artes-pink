@@ -115,8 +115,7 @@ export async function validateRasterImage(buffer: Buffer, spec: FileSpec): Promi
 
     if (cmInterpretation) {
       warnings.push(
-        `Tu imagen fue exportada con medidas en centímetros (${(detectedWidthM * 100).toFixed(1)}×${(detectedHeightM * 100).toFixed(1)} cm) ` +
-        `en vez de metros. Los valores coinciden, lo aceptamos automáticamente. Recomendamos exportar en metros.`
+        `Tu imagen mide ${(detectedWidthM * 100).toFixed(1)}×${(detectedHeightM * 100).toFixed(1)} cm — las medidas coinciden con lo solicitado, lo aceptamos.`
       );
       return {
         valid: true,
@@ -166,8 +165,7 @@ export async function validateRasterImage(buffer: Buffer, spec: FileSpec): Promi
 
     if (cmInterpretation) {
       warnings.push(
-        `Tu imagen fue exportada en centímetros (${(detectedWidthM * 100).toFixed(1)}×${(detectedHeightM * 100).toFixed(1)} cm) ` +
-        `en vez de metros. Los valores coinciden, lo aceptamos automáticamente.`
+        `Tu imagen mide ${(detectedWidthM * 100).toFixed(1)}×${(detectedHeightM * 100).toFixed(1)} cm — las medidas coinciden con lo solicitado, lo aceptamos.`
       );
       return {
         valid: true,
@@ -247,13 +245,11 @@ export async function validatePDF(buffer: Buffer, spec: FileSpec): Promise<Valid
     matchesAsCentimeters(detectedWidthM, spec.heightCm) && matchesAsCentimeters(detectedHeightM, spec.widthCm);
 
   if (cmInterpretation || cmInterpretationSwapped) {
-    // Accept with warning — client likely used cm as the unit instead of meters
     warnings.push(
-      `Tu PDF fue exportado en centímetros (${detectedWidthM * 100}×${detectedHeightM * 100} cm) en vez de metros. ` +
-      `Las medidas coinciden con lo requerido, lo aceptamos automáticamente. Recomendamos exportar en metros para evitar confusiones.`
+      `Tu PDF mide ${(detectedWidthM * 100).toFixed(1)}×${(detectedHeightM * 100).toFixed(1)} cm — las medidas coinciden con lo solicitado, lo aceptamos.`
     );
     if (cmInterpretationSwapped) {
-      warnings.push('La orientación del PDF está invertida pero los valores coinciden — verifica que la rotación sea correcta antes de imprimir.');
+      warnings.push('La orientación está invertida pero los valores coinciden — verifica la rotación antes de imprimir.');
     }
     return {
       valid: true,

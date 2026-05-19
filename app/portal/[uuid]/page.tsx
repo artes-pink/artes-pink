@@ -158,6 +158,9 @@ function SpecCard({ spec }: { spec: Spec }) {
           <p className="text-xs text-gray-400 mt-1.5 leading-relaxed">
             Tu archivo debe tener estas dimensiones exactas. El área de sangrado es el margen extra que se recorta al instalar.
           </p>
+          <p className="text-xs text-gray-400 mt-1 leading-relaxed">
+            Las medidas están en <strong>metros</strong>, pero si tu archivo viene en centímetros también lo aceptamos automáticamente.
+          </p>
         </div>
         {hasVisible && (
           <div className="px-5 py-4">
