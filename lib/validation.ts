@@ -33,6 +33,27 @@ export interface FileSpec {
   resolutionDpi?: number | null;
   widthPx?: number | null;
   heightPx?: number | null;
+  colorMode?: string | null;
+}
+
+// Returns 'rgb' | 'cmyk' | 'other' from sharp's metadata.space value
+function classifyRasterColorMode(space: string | undefined): 'rgb' | 'cmyk' | 'other' {
+  if (!space) return 'other';
+  const s = space.toLowerCase();
+  if (s === 'cmyk') return 'cmyk';
+  if (s === 'srgb' || s === 'rgb' || s === 'rgb16' || s.startsWith('rgb')) return 'rgb';
+  return 'other';
+}
+
+// Heuristic: scan a PDF buffer for color space declarations
+function detectPdfColorMode(buffer: Buffer): 'rgb' | 'cmyk' | 'mixed' | 'unknown' {
+  const text = buffer.toString('latin1');
+  const hasCmyk = /\/DeviceCMYK|\/CMYK\b/.test(text);
+  const hasRgb = /\/DeviceRGB|\/CalRGB|\/sRGB/.test(text);
+  if (hasCmyk && hasRgb) return 'mixed';
+  if (hasCmyk) return 'cmyk';
+  if (hasRgb) return 'rgb';
+  return 'unknown';
 }
 
 export async function validateRasterImage(buffer: Buffer, spec: FileSpec): Promise<ValidationResult> {
@@ -54,6 +75,19 @@ export async function validateRasterImage(buffer: Buffer, spec: FileSpec): Promi
   const widthPx = metadata.width!;
   const heightPx = metadata.height!;
   const dpi = metadata.density ?? null;
+  const detectedColor = classifyRasterColorMode(metadata.space);
+
+  // Validate color mode against spec
+  if (spec.colorMode) {
+    const expected = spec.colorMode.toUpperCase();
+    if (expected === 'RGB' && detectedColor === 'cmyk') {
+      errors.push('Modo de color incorrecto: tu archivo está en CMYK pero este producto requiere RGB. Exporta tu archivo en RGB y vuelve a subirlo.');
+    } else if (expected === 'CMYK' && detectedColor === 'rgb') {
+      errors.push('Modo de color incorrecto: tu archivo está en RGB pero este producto requiere CMYK para impresión. Convierte tu archivo a CMYK y vuelve a subirlo.');
+    } else if (expected === 'CMYK' && detectedColor === 'other') {
+      warnings.push('No se pudo detectar el modo de color del archivo. Verifica manualmente que esté en CMYK para impresión.');
+    }
+  }
 
   // Digital validation: compare pixel dimensions directly
   if (spec.widthPx && spec.heightPx) {
@@ -275,6 +309,21 @@ export async function validatePDF(buffer: Buffer, spec: FileSpec): Promise<Valid
 
   if (spec.resolutionDpi) {
     warnings.push(`Los PDFs no almacenan DPI de forma estándar. Asegúrate de que tu PDF fue exportado a ${spec.resolutionDpi} DPI.`);
+  }
+
+  // Validate color mode (heuristic: scan PDF for color space declarations)
+  if (spec.colorMode) {
+    const expected = spec.colorMode.toUpperCase();
+    const detected = detectPdfColorMode(buffer);
+    if (expected === 'CMYK' && detected === 'rgb') {
+      errors.push('Modo de color incorrecto: tu PDF está en RGB pero este producto requiere CMYK para impresión. Reexporta el PDF en CMYK.');
+    } else if (expected === 'RGB' && detected === 'cmyk') {
+      errors.push('Modo de color incorrecto: tu PDF está en CMYK pero este producto requiere RGB. Reexporta el PDF en RGB.');
+    } else if (expected === 'CMYK' && detected === 'mixed') {
+      warnings.push('Tu PDF tiene contenido en CMYK y RGB mezclados. Para impresión es preferible que todo el contenido esté en CMYK.');
+    } else if (detected === 'unknown') {
+      warnings.push(`No se pudo detectar el modo de color del PDF. Verifica manualmente que esté en ${expected}.`);
+    }
   }
 
   return {

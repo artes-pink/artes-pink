@@ -182,6 +182,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       resolutionDpi: s.resolutionDpi ?? null,
       widthPx: s.widthPx ?? null,
       heightPx: s.heightPx ?? null,
+      colorMode: s.colorMode ?? null,
     };
 
     const result = await validateFile(buffer, mimeType, spec);
