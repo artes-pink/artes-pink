@@ -92,13 +92,13 @@ export async function validateRasterImage(buffer: Buffer, spec: FileSpec): Promi
   const dpi = metadata.density ?? null;
   const detectedColor = classifyRasterColorMode(metadata.space);
 
-  // Color mode check (warning only — don't reject the upload, just inform)
+  // Color mode validation: pantallas (RGB), impresión (CMYK) — must match
   if (spec.colorMode) {
     const expected = spec.colorMode.toUpperCase();
     if (expected === 'RGB' && detectedColor === 'cmyk') {
-      warnings.push('Tu archivo está en CMYK; este producto idealmente debería estar en RGB para visualización digital.');
+      errors.push('Este producto es para pantalla y requiere RGB. Tu archivo está en CMYK — convierte a RGB y vuelve a subirlo.');
     } else if (expected === 'CMYK' && detectedColor === 'rgb') {
-      warnings.push('Tu archivo está en RGB; para impresión es preferible CMYK. Avisaremos al proveedor para que ajuste si es necesario.');
+      errors.push('Este producto es para impresión y requiere CMYK. Tu archivo está en RGB — convierte a CMYK y vuelve a subirlo.');
     }
   }
 
@@ -377,16 +377,16 @@ export async function validatePDF(buffer: Buffer, spec: FileSpec): Promise<Valid
     warnings.push(`Los PDFs no almacenan DPI de forma estándar. Asegúrate de que tu PDF fue exportado a ${spec.resolutionDpi} DPI.`);
   }
 
-  // Color mode check for PDFs (warning only — don't reject the upload)
+  // Color mode validation for PDFs: pantallas (RGB), impresión (CMYK) — must match
   if (spec.colorMode) {
     const expected = spec.colorMode.toUpperCase();
     const detected = detectPdfColorMode(buffer);
     if (expected === 'CMYK' && detected === 'rgb') {
-      warnings.push('Tu PDF está en RGB; para impresión es preferible CMYK. Avisaremos al proveedor para que ajuste si es necesario.');
+      errors.push('Este producto es para impresión y requiere CMYK. Tu PDF está en RGB — reexpórtalo en CMYK y vuelve a subirlo.');
     } else if (expected === 'RGB' && detected === 'cmyk') {
-      warnings.push('Tu PDF está en CMYK; este producto idealmente debería estar en RGB.');
+      errors.push('Este producto es para pantalla y requiere RGB. Tu PDF está en CMYK — reexpórtalo en RGB y vuelve a subirlo.');
     } else if (expected === 'CMYK' && detected === 'mixed') {
-      warnings.push('Tu PDF tiene contenido en CMYK y RGB mezclados.');
+      warnings.push('Tu PDF tiene contenido en CMYK y RGB mezclados — para impresión ideal todo debería estar en CMYK.');
     }
   }
 
