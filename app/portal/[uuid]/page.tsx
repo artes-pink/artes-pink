@@ -150,28 +150,34 @@ function SpecCard({ spec }: { spec: Spec }) {
         <div className="px-5 py-4">
           <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5">Tamaño del arte</p>
           <p className="font-[family-name:var(--font-outfit)] text-2xl font-bold text-gray-900 leading-none">
-            {totalW}
+            {Math.round(totalW * 100)}
             <span className="text-lg text-gray-300 mx-1.5 font-light">×</span>
-            {totalH}
-            <span className="text-sm text-gray-500 font-medium ml-1.5">m</span>
+            {Math.round(totalH * 100)}
+            <span className="text-sm text-gray-500 font-medium ml-1.5">cm</span>
           </p>
-          <p className="text-xs text-gray-400 mt-1.5 leading-relaxed">
+          <p className="text-xs text-gray-400 mt-1 leading-none">
+            equivale a {totalW} × {totalH} m
+          </p>
+          <p className="text-xs text-gray-400 mt-2 leading-relaxed">
             Tu archivo debe tener estas dimensiones exactas. El área de sangrado es el margen extra que se recorta al instalar.
           </p>
           <p className="text-xs text-gray-400 mt-1 leading-relaxed">
-            Las medidas están en <strong>metros</strong>, pero si tu archivo viene en centímetros también lo aceptamos automáticamente.
+            La unidad principal es <strong>centímetros</strong>, pero si tu archivo viene en metros también lo aceptamos automáticamente.
           </p>
         </div>
         {hasVisible && (
           <div className="px-5 py-4">
             <p className="text-xs font-medium text-amber-500 uppercase tracking-wider mb-1.5">Zona visible</p>
             <p className="font-[family-name:var(--font-outfit)] text-2xl font-bold text-gray-900 leading-none">
-              {visW}
+              {Math.round((visW ?? 0) * 100)}
               <span className="text-lg text-gray-300 mx-1.5 font-light">×</span>
-              {visH}
-              <span className="text-sm text-gray-500 font-medium ml-1.5">m</span>
+              {Math.round((visH ?? 0) * 100)}
+              <span className="text-sm text-gray-500 font-medium ml-1.5">cm</span>
             </p>
-            <p className="text-xs text-amber-600 mt-1.5 leading-relaxed">
+            <p className="text-xs text-gray-400 mt-1 leading-none">
+              equivale a {visW} × {visH} m
+            </p>
+            <p className="text-xs text-amber-600 mt-2 leading-relaxed">
               Textos, logos e imágenes importantes deben quedar dentro de esta zona — lo que esté afuera puede no verse.
             </p>
           </div>

@@ -399,16 +399,24 @@ export default function SpecsPage() {
                           }
                         </td>
                         <td className="px-4 py-3 font-medium text-gray-700">
-                          {isDigital
-                            ? (spec.widthPx && spec.heightPx ? `${spec.widthPx} × ${spec.heightPx} px` : '—')
-                            : (spec.widthCm && spec.heightCm ? `${parseFloat(spec.widthCm)} × ${parseFloat(spec.heightCm)} m` : '—')
-                          }
+                          {isDigital ? (
+                            spec.widthPx && spec.heightPx ? `${spec.widthPx} × ${spec.heightPx} px` : '—'
+                          ) : spec.widthCm && spec.heightCm ? (
+                            <>
+                              <div>{Math.round(parseFloat(spec.widthCm) * 100)} × {Math.round(parseFloat(spec.heightCm) * 100)} cm</div>
+                              <div className="text-xs text-gray-400 font-normal">{parseFloat(spec.widthCm)} × {parseFloat(spec.heightCm)} m</div>
+                            </>
+                          ) : '—'}
                         </td>
                         <td className="px-4 py-3 text-gray-500">
-                          {spec.widthVisibleCm && spec.heightVisibleCm
-                            ? `${parseFloat(spec.widthVisibleCm)} × ${parseFloat(spec.heightVisibleCm)} m`
-                            : <span className="text-gray-200">—</span>
-                          }
+                          {spec.widthVisibleCm && spec.heightVisibleCm ? (
+                            <>
+                              <div>{Math.round(parseFloat(spec.widthVisibleCm) * 100)} × {Math.round(parseFloat(spec.heightVisibleCm) * 100)} cm</div>
+                              <div className="text-xs text-gray-300">{parseFloat(spec.widthVisibleCm)} × {parseFloat(spec.heightVisibleCm)} m</div>
+                            </>
+                          ) : (
+                            <span className="text-gray-200">—</span>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-gray-500">
                           {spec.resolutionDpi
