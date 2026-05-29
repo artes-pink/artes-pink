@@ -24,6 +24,7 @@ interface SpecRow {
   widthVisibleCm: number | null;
   heightVisibleCm: number | null;
   resolutionDpi: number | null;
+  resolutionDpiMax: number | null;
   // Digital (RGB)
   widthPx: number | null;
   heightPx: number | null;
@@ -31,83 +32,113 @@ interface SpecRow {
   notes: string | null;
 }
 
-// Parses "1.23 x 1.81 m." or "1920 x 1080 px" or "114 x 179 cm"
-function parseDimension(val: unknown): { widthCm: number | null; heightCm: number | null; widthPx: number | null; heightPx: number | null } {
+// Parses "1.23 x 1.81 m" or "1920 x 1080 px" or "295 x 185 cm"
+function parseDimension(val: unknown): { widthM: number | null; heightM: number | null; widthPx: number | null; heightPx: number | null } {
   const str = String(val ?? '').trim();
-  if (!str || str === '-') return { widthCm: null, heightCm: null, widthPx: null, heightPx: null };
+  if (!str || str === '-') return { widthM: null, heightM: null, widthPx: null, heightPx: null };
 
-  // "1920 x 1080 px" or "1920x1080px"
   const pxMatch = str.match(/([\d.]+)\s*[xX×]\s*([\d.]+)\s*px/i);
   if (pxMatch) {
-    return { widthCm: null, heightCm: null, widthPx: Math.round(parseFloat(pxMatch[1])), heightPx: Math.round(parseFloat(pxMatch[2])) };
+    return { widthM: null, heightM: null, widthPx: Math.round(parseFloat(pxMatch[1])), heightPx: Math.round(parseFloat(pxMatch[2])) };
   }
 
-  // "1.23 x 1.81 m." or "1.23x1.81m" — store as meters
-  const mMatch = str.match(/([\d.]+)\s*[xX×]\s*([\d.]+)\s*m/i);
+  const mMatch = str.match(/([\d.]+)\s*[xX×]\s*([\d.]+)\s*m\b/i);
   if (mMatch) {
-    return { widthCm: parseFloat(parseFloat(mMatch[1]).toFixed(3)), heightCm: parseFloat(parseFloat(mMatch[2]).toFixed(3)), widthPx: null, heightPx: null };
+    return { widthM: parseFloat(parseFloat(mMatch[1]).toFixed(3)), heightM: parseFloat(parseFloat(mMatch[2]).toFixed(3)), widthPx: null, heightPx: null };
   }
 
-  // "114 x 179 cm" — convert to meters
   const cmMatch = str.match(/([\d.]+)\s*[xX×]\s*([\d.]+)\s*cm/i);
   if (cmMatch) {
-    return { widthCm: parseFloat((parseFloat(cmMatch[1]) / 100).toFixed(3)), heightCm: parseFloat((parseFloat(cmMatch[2]) / 100).toFixed(3)), widthPx: null, heightPx: null };
+    return { widthM: parseFloat((parseFloat(cmMatch[1]) / 100).toFixed(3)), heightM: parseFloat((parseFloat(cmMatch[2]) / 100).toFixed(3)), widthPx: null, heightPx: null };
   }
 
-  return { widthCm: null, heightCm: null, widthPx: null, heightPx: null };
+  return { widthM: null, heightM: null, widthPx: null, heightPx: null };
 }
 
-function parseExcelRow(row: Record<string, unknown>): SpecRow | null {
-  const code = String(row['ID'] ?? row['product_code'] ?? row['Código'] ?? row['Codigo'] ?? '').trim();
-  const name = String(row['Nombre'] ?? row['product_name'] ?? row['name'] ?? '').trim();
+// Parses "150 - 300 Dpi" → {min: 150, max: 300}; "50 Dpi" → {min: 50, max: 50}; "-" → null
+function parseDpi(val: unknown): { min: number | null; max: number | null } {
+  const str = String(val ?? '').trim();
+  if (!str || str === '-') return { min: null, max: null };
+  const rangeMatch = str.match(/(\d+)\s*[-–]\s*(\d+)/);
+  if (rangeMatch) {
+    return { min: parseInt(rangeMatch[1], 10), max: parseInt(rangeMatch[2], 10) };
+  }
+  const singleMatch = str.match(/(\d+)/);
+  if (singleMatch) {
+    const v = parseInt(singleMatch[1], 10);
+    return { min: v, max: v };
+  }
+  return { min: null, max: null };
+}
 
+// Parses "10 seg." → 10; "-" → null
+function parseDuration(val: unknown): number | null {
+  const str = String(val ?? '').trim();
+  if (!str || str === '-') return null;
+  const m = str.match(/(\d+)/);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+// Reads a row by column INDEX (positions A=0, B=1, ...). The Excel has duplicate headers
+// so reading by header name doesn't work — we map by position.
+function parseExcelRow(row: unknown[]): SpecRow | null {
+  // Column layout (matches DIMENSIONES PRODUCTOS ODOO Excel):
+  // 0:CATEGORIA  1:Nombre  2:ID  3:ESTATUS  4:FORMATO
+  // 5:AREA VISIBLE (M)  6:AREA VISIBLE (CM)  7:AREA VISIBLE (10% CM)
+  // 8:AREA TOTAL (M)    9:AREA TOTAL (CM)    10:AREA TOTAL (10% CM)
+  // 11:DURACIÓN  12:RESOLUCIÓN  13:CODIGO DE COLOR  14:MATERIAL
+
+  const code = String(row[2] ?? '').trim();
+  const name = String(row[1] ?? '').trim();
   if (!code || !name) return null;
 
-  const areaTotal = parseDimension(row['AREA TOTAL'] ?? row['area_total'] ?? row['Area Total'] ?? '');
-  const areaVisible = parseDimension(row['AREA VISIBLE'] ?? row['area_visible'] ?? row['Area Visible'] ?? '');
+  const formato = String(row[4] ?? '').trim() || null;
+  const visibleArea = parseDimension(row[5]);
+  const totalArea = parseDimension(row[8]);
+  const duration = parseDuration(row[11]);
+  const dpi = parseDpi(row[12]);
+  const colorMode = String(row[13] ?? '').trim().toUpperCase() || null;
+  const material = String(row[14] ?? '').trim();
+  const materialClean = material && material !== '-' ? material : null;
 
-  const colorMode = String(row['CODIGO DE COLOR'] ?? row['color_mode'] ?? row['Código de color'] ?? '').trim() || null;
-  const acceptedFormats = String(row['FORMATO'] ?? row['formato'] ?? '').trim() || null;
-  const material = String(row['MATERIAL'] ?? row['material'] ?? row['Material'] ?? '').trim() || null;
-
-  const dpiRaw = String(row['DPI'] ?? row['dpi'] ?? row['RESOLUCIÓN'] ?? row['Resolución'] ?? row['Resolucion'] ?? row['RESOLUCION'] ?? row['resolution_dpi'] ?? '').trim();
-  const resolutionDpi = dpiRaw ? parseInt(dpiRaw.replace(/[^\d]/g, ''), 10) || null : null;
-
-  const isDigital = areaTotal.widthPx !== null;
+  // Digital product: AREA TOTAL holds pixel dimensions
+  const isDigital = totalArea.widthPx !== null;
 
   if (isDigital) {
     return {
       productCode: code,
       productName: name,
-      colorMode,
-      acceptedFormats,
-      material,
+      colorMode: colorMode === '-' ? null : colorMode,
+      acceptedFormats: formato,
+      material: materialClean,
       widthCm: null,
       heightCm: null,
       widthVisibleCm: null,
       heightVisibleCm: null,
-      resolutionDpi,
-      widthPx: areaTotal.widthPx,
-      heightPx: areaTotal.heightPx,
-      durationSeconds: 10,
+      resolutionDpi: null,
+      resolutionDpiMax: null,
+      widthPx: totalArea.widthPx,
+      heightPx: totalArea.heightPx,
+      durationSeconds: duration ?? 10,
       notes: null,
     };
   }
 
-  // Physical product: must have at least AREA TOTAL in cm
-  if (!areaTotal.widthCm || !areaTotal.heightCm) return null;
+  // Physical product needs AREA TOTAL in meters
+  if (totalArea.widthM === null || totalArea.heightM === null) return null;
 
   return {
     productCode: code,
     productName: name,
-    colorMode,
-    acceptedFormats,
-    material,
-    widthCm: areaTotal.widthCm,
-    heightCm: areaTotal.heightCm,
-    widthVisibleCm: areaVisible.widthCm,
-    heightVisibleCm: areaVisible.heightCm,
-    resolutionDpi,
+    colorMode: colorMode === '-' ? null : colorMode,
+    acceptedFormats: formato,
+    material: materialClean,
+    widthCm: totalArea.widthM,
+    heightCm: totalArea.heightM,
+    widthVisibleCm: visibleArea.widthM,
+    heightVisibleCm: visibleArea.heightM,
+    resolutionDpi: dpi.min,
+    resolutionDpiMax: dpi.max,
     widthPx: null,
     heightPx: null,
     durationSeconds: null,
@@ -139,23 +170,26 @@ export async function POST(request: NextRequest) {
     const workbook = xlsx.read(buffer, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
-    const rows = xlsx.utils.sheet_to_json(sheet) as Record<string, unknown>[];
 
-    const parsed: SpecRow[] = rows.map(parseExcelRow).filter((r): r is SpecRow => r !== null);
+    // Read as array of arrays (preserves duplicate headers by position)
+    const rows = xlsx.utils.sheet_to_json(sheet, { header: 1 }) as unknown[][];
+
+    // Skip header row, parse rest
+    const dataRows = rows.slice(1);
+    const parsed: SpecRow[] = dataRows.map(parseExcelRow).filter((r): r is SpecRow => r !== null);
 
     if (parsed.length === 0) {
       return NextResponse.json({
-        error: 'No se encontraron filas válidas. Verifica que el archivo tenga las columnas: ID, Nombre, AREA TOTAL, CODIGO DE COLOR, FORMATO.',
+        error: 'No se encontraron filas válidas. Verifica que el archivo tenga las columnas: CATEGORIA, Nombre, ID, FORMATO, AREA TOTAL (M/CM/10%), DURACIÓN, RESOLUCIÓN, CODIGO DE COLOR, MATERIAL.',
       }, { status: 400 });
     }
 
     if (replaceAll) {
-      // Null out FK references first, then delete (raw SQL to avoid drizzle WHERE requirement)
       await db.execute(sql`UPDATE order_items SET spec_id = NULL`);
       await db.execute(sql`DELETE FROM product_specs`);
     }
 
-    // Build material → supplier_id map from all suppliers' materials lists
+    // Build material → supplier_id map
     const allSuppliers = await db.select({ id: suppliers.id, materials: suppliers.materials }).from(suppliers);
     const materialToSupplierId = new Map<string, number>();
     for (const s of allSuppliers) {
@@ -180,6 +214,7 @@ export async function POST(request: NextRequest) {
         widthVisibleCm: s.widthVisibleCm?.toString() ?? null,
         heightVisibleCm: s.heightVisibleCm?.toString() ?? null,
         resolutionDpi: s.resolutionDpi,
+        resolutionDpiMax: s.resolutionDpiMax,
         widthPx: s.widthPx,
         heightPx: s.heightPx,
         durationSeconds: s.durationSeconds,
@@ -198,6 +233,7 @@ export async function POST(request: NextRequest) {
           widthVisibleCm: sql`excluded.width_visible_cm`,
           heightVisibleCm: sql`excluded.height_visible_cm`,
           resolutionDpi: sql`excluded.resolution_dpi`,
+          resolutionDpiMax: sql`excluded.resolution_dpi_max`,
           widthPx: sql`excluded.width_px`,
           heightPx: sql`excluded.height_px`,
           durationSeconds: sql`excluded.duration_seconds`,
@@ -206,7 +242,6 @@ export async function POST(request: NextRequest) {
       });
 
     if (replaceAll) {
-      // Re-link order items to new specs by matching productCode (single query)
       await db.execute(sql`
         UPDATE order_items oi
         SET spec_id = ps.id

@@ -180,6 +180,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       widthCm: s.widthCm ? parseFloat(s.widthCm) : null,
       heightCm: s.heightCm ? parseFloat(s.heightCm) : null,
       resolutionDpi: s.resolutionDpi ?? null,
+      resolutionDpiMax: s.resolutionDpiMax ?? null,
       widthPx: s.widthPx ?? null,
       heightPx: s.heightPx ?? null,
       colorMode: s.colorMode ?? null,

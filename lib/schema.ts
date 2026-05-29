@@ -21,6 +21,7 @@ export const productSpecs = pgTable('product_specs', {
   widthVisibleCm: decimal('width_visible_cm', { precision: 8, scale: 2 }),
   heightVisibleCm: decimal('height_visible_cm', { precision: 8, scale: 2 }),
   resolutionDpi: integer('resolution_dpi'),
+  resolutionDpiMax: integer('resolution_dpi_max'),
   // Digital products (RGB) — dimensions in pixels
   widthPx: integer('width_px'),
   heightPx: integer('height_px'),

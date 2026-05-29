@@ -1,7 +1,7 @@
 import sharp from 'sharp';
 import { PDFDocument } from 'pdf-lib';
 
-const TOLERANCE = 0.03; // 3% tolerance
+const TOLERANCE = 0.05; // 5% tolerance — friendlier for clients with slight unit/rounding mismatches
 
 function isWithinTolerance(actual: number, expected: number): boolean {
   const tolerance = expected * TOLERANCE;
@@ -31,6 +31,7 @@ export interface FileSpec {
   widthCm?: number | null;
   heightCm?: number | null;
   resolutionDpi?: number | null;
+  resolutionDpiMax?: number | null;
   widthPx?: number | null;
   heightPx?: number | null;
   colorMode?: string | null;
@@ -56,6 +57,20 @@ function detectPdfColorMode(buffer: Buffer): 'rgb' | 'cmyk' | 'mixed' | 'unknown
   return 'unknown';
 }
 
+// Returns true if detected matches expected at 1/10 scale (10% proof size)
+function matchesAtTenPercent(detectedM: number, expectedM: number): boolean {
+  return isWithinTolerance(detectedM * 10, expectedM);
+}
+
+// Returns true if DPI is within the spec range (or matches exactly if no range)
+function dpiWithinRange(detected: number, min: number, max: number | null): boolean {
+  const upper = max ?? min;
+  // Allow tolerance at the edges
+  const lowerBound = min * (1 - TOLERANCE);
+  const upperBound = upper * (1 + TOLERANCE);
+  return detected >= lowerBound && detected <= upperBound;
+}
+
 export async function validateRasterImage(buffer: Buffer, spec: FileSpec): Promise<ValidationResult> {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -77,15 +92,13 @@ export async function validateRasterImage(buffer: Buffer, spec: FileSpec): Promi
   const dpi = metadata.density ?? null;
   const detectedColor = classifyRasterColorMode(metadata.space);
 
-  // Validate color mode against spec
+  // Color mode check (warning only — don't reject the upload, just inform)
   if (spec.colorMode) {
     const expected = spec.colorMode.toUpperCase();
     if (expected === 'RGB' && detectedColor === 'cmyk') {
-      errors.push('Modo de color incorrecto: tu archivo está en CMYK pero este producto requiere RGB. Exporta tu archivo en RGB y vuelve a subirlo.');
+      warnings.push('Tu archivo está en CMYK; este producto idealmente debería estar en RGB para visualización digital.');
     } else if (expected === 'CMYK' && detectedColor === 'rgb') {
-      errors.push('Modo de color incorrecto: tu archivo está en RGB pero este producto requiere CMYK para impresión. Convierte tu archivo a CMYK y vuelve a subirlo.');
-    } else if (expected === 'CMYK' && detectedColor === 'other') {
-      warnings.push('No se pudo detectar el modo de color del archivo. Verifica manualmente que esté en CMYK para impresión.');
+      warnings.push('Tu archivo está en RGB; para impresión es preferible CMYK. Avisaremos al proveedor para que ajuste si es necesario.');
     }
   }
 
@@ -122,9 +135,11 @@ export async function validateRasterImage(buffer: Buffer, spec: FileSpec): Promi
   }
 
   const specDpi = spec.resolutionDpi;
+  const specDpiMax = spec.resolutionDpiMax ?? null;
 
   if (specDpi) {
-    // Validate via pixel count = (meters / 0.0254) * DPI
+    const dpiLabel = specDpiMax && specDpiMax !== specDpi ? `${specDpi}–${specDpiMax} DPI` : `${specDpi} DPI`;
+    // Validate via pixel count = (meters / 0.0254) * DPI — use min DPI as the floor for required pixel count
     const requiredWidthPx = Math.round((spec.widthCm / 0.0254) * specDpi);
     const requiredHeightPx = Math.round((spec.heightCm / 0.0254) * specDpi);
     const effectiveDpi = dpi || specDpi;
@@ -134,10 +149,10 @@ export async function validateRasterImage(buffer: Buffer, spec: FileSpec): Promi
     if (dpi === null) {
       warnings.push(
         `Tu archivo no tiene información de resolución (DPI) en sus metadatos. ` +
-        `Verificando solo las dimensiones en píxeles. Asegúrate de exportar a ${specDpi} DPI.`
+        `Verificando solo las dimensiones en píxeles. Asegúrate de exportar a ${dpiLabel}.`
       );
-    } else if (!isWithinTolerance(dpi, specDpi)) {
-      errors.push(`Resolución incorrecta: tu archivo tiene ${dpi} DPI pero se requieren ${specDpi} DPI.`);
+    } else if (!dpiWithinRange(dpi, specDpi, specDpiMax)) {
+      errors.push(`Resolución fuera de rango: tu archivo tiene ${dpi} DPI pero se requiere ${dpiLabel}.`);
     }
 
     const orientationSwapped =
@@ -146,6 +161,10 @@ export async function validateRasterImage(buffer: Buffer, spec: FileSpec): Promi
     // Detect cm-interpretation: pixels are 100× smaller than expected (file made in cm)
     const cmInterpretation =
       matchesAsCentimeters(detectedWidthM, spec.widthCm) && matchesAsCentimeters(detectedHeightM, spec.heightCm);
+
+    // Detect 10%-scale interpretation: file is 10x smaller than expected (proof/sample size)
+    const tenPercentInterpretation =
+      matchesAtTenPercent(detectedWidthM, spec.widthCm) && matchesAtTenPercent(detectedHeightM, spec.heightCm);
 
     if (cmInterpretation) {
       warnings.push(
@@ -156,6 +175,18 @@ export async function validateRasterImage(buffer: Buffer, spec: FileSpec): Promi
         errors: [],
         warnings,
         detected: { widthPx, heightPx, dpi: dpi ?? undefined, widthCm: detectedWidthM * 100, heightCm: detectedHeightM * 100, format: metadata.format },
+      };
+    }
+
+    if (tenPercentInterpretation) {
+      warnings.push(
+        `Tu imagen está al 10% del tamaño real (${(detectedWidthM * 10).toFixed(2)}×${(detectedHeightM * 10).toFixed(2)} m). Aceptado.`
+      );
+      return {
+        valid: true,
+        errors: [],
+        warnings,
+        detected: { widthPx, heightPx, dpi: dpi ?? undefined, widthCm: detectedWidthM * 10, heightCm: detectedHeightM * 10, format: metadata.format },
       };
     }
 
@@ -196,6 +227,8 @@ export async function validateRasterImage(buffer: Buffer, spec: FileSpec): Promi
     // Detect cm-interpretation here too
     const cmInterpretation =
       matchesAsCentimeters(detectedWidthM, spec.widthCm) && matchesAsCentimeters(detectedHeightM, spec.heightCm);
+    const tenPercentInterpretation =
+      matchesAtTenPercent(detectedWidthM, spec.widthCm) && matchesAtTenPercent(detectedHeightM, spec.heightCm);
 
     if (cmInterpretation) {
       warnings.push(
@@ -206,6 +239,18 @@ export async function validateRasterImage(buffer: Buffer, spec: FileSpec): Promi
         errors: [],
         warnings,
         detected: { widthPx, heightPx, dpi, widthCm: detectedWidthM * 100, heightCm: detectedHeightM * 100, format: metadata.format },
+      };
+    }
+
+    if (tenPercentInterpretation) {
+      warnings.push(
+        `Tu imagen está al 10% del tamaño real (${(detectedWidthM * 10).toFixed(2)}×${(detectedHeightM * 10).toFixed(2)} m). Aceptado.`
+      );
+      return {
+        valid: true,
+        errors: [],
+        warnings,
+        detected: { widthPx, heightPx, dpi, widthCm: detectedWidthM * 10, heightCm: detectedHeightM * 10, format: metadata.format },
       };
     }
 
@@ -278,6 +323,12 @@ export async function validatePDF(buffer: Buffer, spec: FileSpec): Promise<Valid
   const cmInterpretationSwapped =
     matchesAsCentimeters(detectedWidthM, spec.heightCm) && matchesAsCentimeters(detectedHeightM, spec.widthCm);
 
+  // Detect 10% scale (proof size)
+  const tenPercentInterpretation =
+    matchesAtTenPercent(detectedWidthM, spec.widthCm) && matchesAtTenPercent(detectedHeightM, spec.heightCm);
+  const tenPercentSwapped =
+    matchesAtTenPercent(detectedWidthM, spec.heightCm) && matchesAtTenPercent(detectedHeightM, spec.widthCm);
+
   if (cmInterpretation || cmInterpretationSwapped) {
     warnings.push(
       `Tu PDF mide ${(detectedWidthM * 100).toFixed(1)}×${(detectedHeightM * 100).toFixed(1)} cm — las medidas coinciden con lo solicitado, lo aceptamos.`
@@ -290,6 +341,21 @@ export async function validatePDF(buffer: Buffer, spec: FileSpec): Promise<Valid
       errors: [],
       warnings,
       detected: { widthCm: detectedWidthM * 100, heightCm: detectedHeightM * 100, format: 'pdf' },
+    };
+  }
+
+  if (tenPercentInterpretation || tenPercentSwapped) {
+    warnings.push(
+      `Tu PDF está al 10% del tamaño real (${(detectedWidthM * 10).toFixed(2)}×${(detectedHeightM * 10).toFixed(2)} m). Aceptado.`
+    );
+    if (tenPercentSwapped) {
+      warnings.push('La orientación está invertida — verifica la rotación antes de imprimir.');
+    }
+    return {
+      valid: true,
+      errors: [],
+      warnings,
+      detected: { widthCm: detectedWidthM * 10, heightCm: detectedHeightM * 10, format: 'pdf' },
     };
   }
 
@@ -311,18 +377,16 @@ export async function validatePDF(buffer: Buffer, spec: FileSpec): Promise<Valid
     warnings.push(`Los PDFs no almacenan DPI de forma estándar. Asegúrate de que tu PDF fue exportado a ${spec.resolutionDpi} DPI.`);
   }
 
-  // Validate color mode (heuristic: scan PDF for color space declarations)
+  // Color mode check for PDFs (warning only — don't reject the upload)
   if (spec.colorMode) {
     const expected = spec.colorMode.toUpperCase();
     const detected = detectPdfColorMode(buffer);
     if (expected === 'CMYK' && detected === 'rgb') {
-      errors.push('Modo de color incorrecto: tu PDF está en RGB pero este producto requiere CMYK para impresión. Reexporta el PDF en CMYK.');
+      warnings.push('Tu PDF está en RGB; para impresión es preferible CMYK. Avisaremos al proveedor para que ajuste si es necesario.');
     } else if (expected === 'RGB' && detected === 'cmyk') {
-      errors.push('Modo de color incorrecto: tu PDF está en CMYK pero este producto requiere RGB. Reexporta el PDF en RGB.');
+      warnings.push('Tu PDF está en CMYK; este producto idealmente debería estar en RGB.');
     } else if (expected === 'CMYK' && detected === 'mixed') {
-      warnings.push('Tu PDF tiene contenido en CMYK y RGB mezclados. Para impresión es preferible que todo el contenido esté en CMYK.');
-    } else if (detected === 'unknown') {
-      warnings.push(`No se pudo detectar el modo de color del PDF. Verifica manualmente que esté en ${expected}.`);
+      warnings.push('Tu PDF tiene contenido en CMYK y RGB mezclados.');
     }
   }
 
