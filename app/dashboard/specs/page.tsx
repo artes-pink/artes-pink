@@ -15,6 +15,7 @@ interface ProductSpec {
   widthVisibleCm: string | null;
   heightVisibleCm: string | null;
   resolutionDpi: number | null;
+  resolutionDpiMax: number | null;
   widthPx: number | null;
   heightPx: number | null;
   durationSeconds: number | null;
@@ -410,7 +411,11 @@ export default function SpecsPage() {
                           }
                         </td>
                         <td className="px-4 py-3 text-gray-500">
-                          {spec.resolutionDpi ?? <span className="text-gray-200">—</span>}
+                          {spec.resolutionDpi
+                            ? (spec.resolutionDpiMax && spec.resolutionDpiMax !== spec.resolutionDpi
+                                ? `${spec.resolutionDpi}–${spec.resolutionDpiMax}`
+                                : spec.resolutionDpi)
+                            : <span className="text-gray-200">—</span>}
                         </td>
                         <td className="px-4 py-3 text-xs text-gray-500">
                           {spec.acceptedFormats || <span className="text-gray-200">—</span>}
